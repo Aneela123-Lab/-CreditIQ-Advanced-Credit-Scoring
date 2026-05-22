@@ -1,0 +1,755 @@
+================================================================================
+  CreditIQ — Advanced Credit Scoring Web Application
+  CODE DOCUMENTATION FOR CLIENTS
+  Version 1.0  |  April 2025
+================================================================================
+
+This document explains every section and line of the file "app.py", written in
+plain language so that non-technical stakeholders can understand exactly what
+the application does, how it works, and why each piece of code exists.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+  1.  Overview of the Application
+  2.  Technology Stack
+  3.  Section A  — Imports (Lines 1–11)
+  4.  Section B  — Page Configuration (Lines 16–21)
+  5.  Section C  — Custom Styling / CSS (Lines 23–185)
+  6.  Section D  — Data Maps / Label Dictionaries (Lines 187–271)
+  7.  Section E  — Model & Dataset Loading (Lines 273–285)
+  8.  Section F  — Helper Functions (Lines 287–515)
+       F1.  compute_credit_score()
+       F2.  risk_tier()
+       F3.  badge_html()
+       F4.  gauge_chart()
+       F5.  probability_bar()
+       F6.  feature_importance_chart()
+       F7.  dataset_distribution()
+       F8.  age_credit_scatter()
+       F9.  duration_distribution()
+       F10. risk_factors_radar()
+       F11. predict_batch()
+  9.  Section G  — Sidebar (Lines 517–552)
+  10. Section H  — Application Header (Lines 554–562)
+  11. Section I  — Main Navigation Tabs (Lines 564–572)
+  12. Section J  — Tab 1: Single Applicant Scoring (Lines 574–781)
+  13. Section K  — Tab 2: Batch Scoring (Lines 783–870)
+  14. Section L  — Tab 3: Analytics Dashboard (Lines 872–960)
+  15. Section M  — Tab 4: Feature Guide (Lines 962–994)
+  16. Key Concepts Explained (Non-Technical)
+  17. How to Run the Application
+  18. File Structure
+
+================================================================================
+1. OVERVIEW OF THE APPLICATION
+================================================================================
+
+CreditIQ is an AI-powered credit risk assessment platform built using Python
+and Streamlit (a library that turns Python scripts into interactive web apps).
+
+The application uses a pre-trained machine learning model (Random Forest with
+200 decision trees) that was trained on the famous "German Credit Dataset"
+containing 1,000 real-world loan applicants.
+
+When a bank or credit analyst enters an applicant's financial and personal
+information, the model:
+  1. Predicts whether the applicant is a GOOD or BAD credit risk
+  2. Provides a probability score (0–100%)
+  3. Converts this to a credit score between 300 and 850 (similar to FICO)
+  4. Categorises the applicant into Low / Medium / High risk tiers
+  5. Generates personalized recommendations
+  6. Produces a downloadable assessment report
+
+The application also supports batch processing (scoring hundreds of applicants
+at once by uploading a CSV file) and provides a rich analytics dashboard.
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+  - Python 3.x             : The programming language
+  - Streamlit 1.50         : Web framework (turns Python into a web app)
+  - Scikit-learn           : The machine learning library that trained the model
+  - Joblib                 : Used to save and reload the trained model from disk
+  - Pandas                 : Library for handling tables of data (DataFrames)
+  - NumPy                  : Library for numerical calculations
+  - Plotly                 : Used to create interactive charts and graphs
+  - Inter (Google Font)    : Modern sans-serif typeface used in the UI
+
+================================================================================
+3. SECTION A — IMPORTS (Lines 1–11)
+================================================================================
+
+LINE 1:  import streamlit as st
+         ─────────────────────────────────────────────────────────────────────
+         Imports the Streamlit library and gives it the short alias "st".
+         Every time you see "st." in the code, it is using a Streamlit
+         function — such as drawing a table, showing a chart, or adding
+         a text input box.
+
+LINE 2:  import joblib
+         ─────────────────────────────────────────────────────────────────────
+         Imports Joblib. This library is used to load the trained machine
+         learning model from the file "credit_scoring_model.joblib" that
+         was saved to disk after the model was built. Think of it like
+         opening a saved file.
+
+LINE 3:  import pandas as pd
+         ─────────────────────────────────────────────────────────────────────
+         Imports Pandas, the most popular Python data analysis library.
+         It lets us work with tables of data (called DataFrames). When a
+         user fills in a form, we convert their answers into a one-row
+         DataFrame that the model can understand.
+
+LINE 4:  import numpy as np
+         ─────────────────────────────────────────────────────────────────────
+         Imports NumPy, used for numerical operations such as power
+         functions and array manipulation. It is used when computing the
+         credit score from a probability value.
+
+LINE 5:  import plotly.graph_objects as go
+         ─────────────────────────────────────────────────────────────────────
+         Imports Plotly's core graphing module. Used to build custom charts
+         such as the credit score gauge, the probability stacked bar,
+         the radar chart, and the histogram.
+
+LINE 6:  import plotly.express as px
+         ─────────────────────────────────────────────────────────────────────
+         Imports Plotly Express — a simpler, higher-level charting API.
+         Used for the scatter plot, pie chart, and grouped bar chart in
+         the Analytics Dashboard.
+
+LINE 7:  import warnings
+         ─────────────────────────────────────────────────────────────────────
+         Imports Python's built-in warnings system.
+
+LINE 8:  import io
+         ─────────────────────────────────────────────────────────────────────
+         Imports the io module. Used to create in-memory file buffers
+         when generating downloadable CSV files (batch results and the
+         CSV template) without saving them to disk first.
+
+LINE 9:  from datetime import datetime
+         ─────────────────────────────────────────────────────────────────────
+         Imports the datetime class from the datetime module. Used to
+         timestamp download files and the assessment report with the
+         current date and time.
+
+LINE 11: warnings.filterwarnings("ignore")
+         ─────────────────────────────────────────────────────────────────────
+         Suppresses warning messages. The machine learning model was saved
+         with a slightly older version of scikit-learn, so when loaded
+         with a newer version, Python raises version-mismatch warnings.
+         This line hides those harmless messages to keep the output clean.
+
+================================================================================
+4. SECTION B — PAGE CONFIGURATION (Lines 16–21)
+================================================================================
+
+LINE 16–21:
+    st.set_page_config(
+        page_title="CreditIQ — Advanced Credit Scoring",
+        page_icon="🏦",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    ─────────────────────────────────────────────────────────────────────────
+    This must be the FIRST Streamlit command executed. It configures the
+    browser tab settings for the entire application.
+
+    page_title             : The text that appears in the browser tab.
+    page_icon              : The emoji shown as the browser favicon (🏦).
+    layout="wide"          : Uses the full width of the browser window
+                             instead of a narrow centered column.
+    initial_sidebar_state  : Opens the left sidebar by default when the
+                             app first loads.
+
+================================================================================
+5. SECTION C — CUSTOM STYLING / CSS (Lines 23–185)
+================================================================================
+
+LINE 26–185:
+    st.markdown("""<style> ... </style>""", unsafe_allow_html=True)
+
+    ─────────────────────────────────────────────────────────────────────────
+    This large block injects custom CSS (Cascading Style Sheets) directly
+    into the web page. CSS controls the visual appearance of the app.
+    The "unsafe_allow_html=True" parameter is required when injecting raw
+    HTML or CSS through Streamlit.
+
+    Key styles defined here:
+
+    Google Font Import
+      @import url('https://fonts.googleapis.com/...')
+      Loads the "Inter" font family from Google Fonts for modern, clean
+      typography across the entire application.
+
+    .stApp { background: linear-gradient(...) }
+      Sets a deep dark purple-blue gradient as the app's background,
+      giving it a premium, modern fintech look.
+
+    [data-testid="stSidebar"] { ... }
+      Applies a frosted glass effect to the sidebar using CSS
+      backdrop-filter: blur(20px) and semi-transparent background.
+
+    .header-banner { background: linear-gradient(90deg, #6c63ff, #3ecf8e) }
+      Defines the gradient purple-to-green banner at the top of the app.
+
+    .metric-card { ... }
+      Styles the KPI cards (Credit Score, P(Good), Risk Tier) with
+      a glassmorphism effect — semi-transparent background with a
+      subtle border and blur.
+
+    .result-good / .result-bad { ... }
+      Two result card styles: green-tinted for Good Credit outcomes,
+      red-tinted for Bad Credit outcomes.
+
+    .badge-low / .badge-medium / .badge-high { ... }
+      Pill-shaped coloured badges: green for Low risk, orange for
+      Medium, red for High.
+
+    .stTabs [aria-selected="true"] { ... }
+      Applies the purple-to-green gradient to the currently active tab.
+
+    [data-testid="baseButton-primary"] { ... }
+      Styles the primary action buttons with the same gradient and
+      a subtle glow box-shadow for a premium button feel.
+
+================================================================================
+6. SECTION D — DATA MAPS / LABEL DICTIONARIES (Lines 187–271)
+================================================================================
+
+The German Credit Dataset uses numeric codes (1, 2, 3, etc.) to represent
+categorical values. These dictionaries translate those internal codes into
+human-readable English labels that are shown in the user interface.
+
+    CHECKING_ACCOUNT = { 1: "< 0 DM  (Negative / No account)", ... }
+    ─────────────────────────────────────────────────────────────────────────
+    Maps numeric codes 1–4 to descriptions of the applicant's checking
+    account balance status. This is the MOST IMPORTANT feature (16.1%
+    model importance).
+
+    CREDIT_HISTORY = { 0: "No credits / all paid back duly", ... }
+    ─────────────────────────────────────────────────────────────────────────
+    Maps codes 0–4 to descriptions of past credit behaviour.
+
+    PURPOSE = { 0: "Car (new)", 1: "Car (used)", ... }
+    ─────────────────────────────────────────────────────────────────────────
+    Maps codes 0–10 to the reason for the loan application.
+
+    SAVINGS = { 1: "< 100 DM", ... }
+    EMPLOYMENT = { 1: "Unemployed", ... }
+    INSTALLMENT_RATE = { 1: "≥ 35 %", ... }
+    PERSONAL_STATUS = { 1: "Male – divorced / separated", ... }
+    GUARANTORS = { 1: "None", ... }
+    RESIDENCE = { 1: "< 1 year", ... }
+    PROPERTY = { 1: "Real estate", ... }
+    OTHER_PLANS = { 1: "Bank", ... }
+    HOUSING = { 1: "Rent", ... }
+    EXISTING_CREDITS = { 1: "1", ... }
+    JOB = { 1: "Unemployed / unskilled – non-resident", ... }
+    MAINTENANCE = { 1: "3 or more", ... }
+    TELEPHONE = { 1: "None", ... }
+    FOREIGN = { 1: "Yes", ... }
+    ─────────────────────────────────────────────────────────────────────────
+    Each of these follows the same pattern — a Python dictionary where
+    numeric keys map to readable string values shown in the dropdown menus.
+
+    FEATURE_LABELS = { "laufkont": "Checking Account Status", ... }
+    ─────────────────────────────────────────────────────────────────────────
+    Maps original German column names (used internally by the model) to
+    English display names used in the UI and reports. The model was trained
+    on a German dataset, hence the German column names (e.g., "laufzeit"
+    means "duration", "hoehe" means "amount").
+
+    FEATURE_IMPORTANCES = { "laufkont": 0.1613, ... }
+    ─────────────────────────────────────────────────────────────────────────
+    A dictionary storing the pre-computed feature importance values that
+    the Random Forest model assigned to each feature. These values sum to
+    approximately 1.0 (100%). Higher values mean the feature has more
+    influence on the model's decisions. Hard-coded here to avoid
+    recomputing them on every page load.
+
+================================================================================
+7. SECTION E — MODEL & DATASET LOADING (Lines 273–285)
+================================================================================
+
+LINE 276–278:
+    @st.cache_resource
+    def load_model():
+        return joblib.load("credit_scoring_model.joblib")
+
+    ─────────────────────────────────────────────────────────────────────────
+    Defines a function that loads the trained machine learning model from
+    the file "credit_scoring_model.joblib" on disk.
+
+    @st.cache_resource is a Streamlit decorator that ensures this function
+    runs ONLY ONCE when the app first starts, and then caches (stores) the
+    result in memory. If it ran every time a user clicked a button, it would
+    needlessly reload the model from disk, making the app slow.
+
+    The model is a scikit-learn Pipeline containing:
+      1. A ColumnTransformer (preprocessor) — handles data transformation
+      2. A RandomForestClassifier (200 trees) — makes predictions
+
+LINE 280–282:
+    @st.cache_data
+    def load_dataset():
+        return pd.read_csv("german_credit_data.csv")
+
+    ─────────────────────────────────────────────────────────────────────────
+    Similarly loads the training dataset CSV file into memory.
+    @st.cache_data caches data (like DataFrames) so it is only read
+    from disk once. The dataset powers all the charts in the Analytics
+    Dashboard, as well as the sidebar statistics.
+
+LINE 284–285:
+    model = load_model()
+    df_ref = load_dataset()
+
+    ─────────────────────────────────────────────────────────────────────────
+    Calls both loading functions and stores their results in global
+    variables (model and df_ref) so they are accessible throughout the
+    entire application.
+
+================================================================================
+8. SECTION F — HELPER FUNCTIONS (Lines 287–515)
+================================================================================
+
+F1. compute_credit_score(prob_good)  —  Lines 296–298
+────────────────────────────────────────────────────────
+    def compute_credit_score(prob_good: float) -> int:
+        return int(300 + (prob_good ** 0.7) * 550)
+
+    Takes the model's probability of good credit (a number between 0.0
+    and 1.0) and converts it to a credit score on a 300–850 scale,
+    which mirrors the widely-used FICO credit score format.
+
+    Formula explanation:
+      - The minimum score is 300 (when probability = 0)
+      - The maximum score is 850 (when probability = 1)
+      - The exponent 0.7 applies a slight curve so that mid-range
+        probabilities produce more spread-out scores, making the
+        scoring feel more granular and realistic.
+      - Example: 0.80 probability → score of approximately 718
+
+F2. risk_tier(prob_good)  —  Lines 300–303
+────────────────────────────────────────────────────────
+    def risk_tier(prob_good: float) -> str:
+        if prob_good >= 0.75: return "Low"
+        if prob_good >= 0.45: return "Medium"
+        return "High"
+
+    Classifies an applicant into one of three risk categories based on
+    their probability of being a good credit risk:
+      ≥ 75%  →  Low Risk    (safe to approve)
+      45–74% →  Medium Risk (requires review)
+      < 45%  →  High Risk   (likely to decline)
+
+F3. badge_html(tier)  —  Lines 305–308
+────────────────────────────────────────────────────────
+    Generates an HTML string for a coloured pill-shaped badge.
+    The CSS classes badge-low / badge-medium / badge-high (defined in
+    Section C) apply green / orange / red colours respectively.
+    This badge is displayed below the main result card.
+
+F4. gauge_chart(score)  —  Lines 310–340
+────────────────────────────────────────────────────────
+    Creates and returns a Plotly gauge chart (like a car speedometer)
+    showing the applicant's credit score on a 300–850 scale.
+
+    Key parts:
+      go.Indicator(mode="gauge+number")
+          Tells Plotly to draw a gauge dial with the score number in
+          the centre.
+
+      "axis": {"range": [300, 850]}
+          Sets the minimum and maximum values on the gauge arc.
+
+      "steps": [...]
+          Defines three coloured zones on the dial:
+            300–500 (red zone)   = Poor credit
+            500–650 (amber zone) = Fair credit
+            650–850 (green zone) = Good credit
+
+      paper_bgcolor="rgba(0,0,0,0)"
+      plot_bgcolor="rgba(0,0,0,0)"
+          Makes the chart background fully transparent so it blends
+          seamlessly with the app's dark background.
+
+F5. probability_bar(prob_good)  —  Lines 342–375
+────────────────────────────────────────────────────────
+    Creates a horizontal stacked bar chart showing:
+      [  Good Credit %  ][  Bad Credit %  ]
+    in green and red, adding up to 100%.
+    This gives users an intuitive visual of how confident the model is.
+
+F6. feature_importance_chart()  —  Lines 377–401
+────────────────────────────────────────────────────────
+    Creates a horizontal bar chart of all 20 features ranked by their
+    importance to the model. Bars with higher importance values are
+    rendered darker. This helps analysts understand which inputs the
+    AI considers most when making a decision.
+    Shown in the Analytics Dashboard tab.
+
+F7. dataset_distribution()  —  Lines 403–421
+────────────────────────────────────────────────────────
+    Creates a donut pie chart showing how the 1,000 training records
+    split between Good Credit (70%) and Bad Credit (30%).
+    Rendered in the Analytics Dashboard.
+
+F8. age_credit_scatter()  —  Lines 423–441
+────────────────────────────────────────────────────────
+    Creates a scatter plot with:
+      X-axis = Applicant age
+      Y-axis = Credit amount requested
+      Colour = Green (Good Credit) / Red (Bad Credit)
+    Allows analysts to spot patterns, e.g. whether older applicants
+    requesting larger amounts tend to be good or bad risks.
+
+F9. duration_distribution()  —  Lines 443–460
+────────────────────────────────────────────────────────
+    Creates an overlapping histogram showing the distribution of loan
+    durations (in months) separately for Good and Bad credit outcomes.
+    Reveals whether longer loans correlate with higher default rates.
+
+F10. risk_factors_radar(input_dict)  —  Lines 462–500
+────────────────────────────────────────────────────────
+    Creates a spider/radar chart showing the applicant's profile
+    across the 8 most important features.
+
+    Each feature value is normalised to a 0–1 scale:
+      0 = worst possible value for creditworthiness
+      1 = best possible value for creditworthiness
+
+    Normalisations applied:
+      laufkont  : (value - 1) / 3        — checking account health
+      hoehe     : 1 - (amount / 18000)   — less debt = better
+      laufzeit  : 1 - (months / 72)      — shorter duration = better
+      moral     : code / 4               — higher code = better history
+      alter     : (age - 19) / 56        — older = more experience
+      verm      : (code - 1) / 3         — better property = better
+      sparkont  : (code - 1) / 4         — more savings = better
+      beszeit   : (code - 1) / 4         — longer employment = better
+
+    The radar shows instantly which dimensions of the applicant are
+    strong or weak, giving credit officers a one-glance overview.
+
+F11. predict_batch(df)  —  Lines 502–515
+────────────────────────────────────────────────────────
+    Accepts a full Pandas DataFrame (from a CSV upload) and runs the
+    model on all rows at once. Returns the original data augmented
+    with four new columns:
+      prediction   : "Good" or "Bad"
+      prob_good    : Probability percentage (0–100)
+      credit_score : FICO-like score (300–850)
+      risk_tier    : "Low", "Medium", or "High"
+
+================================================================================
+9. SECTION G — SIDEBAR (Lines 517–552)
+================================================================================
+
+LINE 520: with st.sidebar:
+    All content inside this block appears in the collapsible left panel.
+
+Model Info Panel (Lines 525–529)
+    Displays static information about the machine learning model:
+    the algorithm, training size, and number of features. Hard-coded
+    to avoid computing these on every interaction.
+
+Dataset Statistics Panel (Lines 531–540)
+    Computes and displays live statistics from the loaded dataset:
+      n_good = count of rows where kredit == 1 (target = 1 means Good)
+      n_bad  = count of rows where kredit == 0 (target = 0 means Bad)
+    Also shows computed averages for Age, Credit Amount, and Duration.
+
+Decision Threshold Slider (Lines 542–550)
+    st.slider("Classify as 'Good' if P(good) ≥", ...)
+    ─────────────────────────────────────────────────────────────────────────
+    This is a powerful advanced feature. The threshold (default 0.50 = 50%)
+    is the minimum probability required to classify an applicant as
+    "Good Credit". By adjusting it:
+      Lower threshold (e.g. 30%): More applicants are approved — useful
+        when the bank wants to increase loan volume.
+      Higher threshold (e.g. 70%): Fewer applicants are approved — useful
+        when the bank wants to be conservative and minimise bad loans.
+    This threshold is read by the prediction logic in Tab 1 and applied
+    to the model's output probability.
+
+================================================================================
+10. SECTION H — APPLICATION HEADER (Lines 554–562)
+================================================================================
+
+    st.markdown("""<div class="header-banner">...</div>""", unsafe_allow_html=True)
+
+    Renders the gradient purple-to-green banner at the top of every page.
+    Uses raw HTML since Streamlit's built-in title elements don't support
+    the custom styling needed for the gradient banner design.
+
+================================================================================
+11. SECTION I — MAIN NAVIGATION TABS (Lines 564–572)
+================================================================================
+
+    tab_single, tab_batch, tab_analytics, tab_guide = st.tabs([...])
+
+    Creates four navigation tabs across the top of the main content area:
+      Tab 1: 🔍 Single Applicant  — score one applicant at a time
+      Tab 2: 📂 Batch Scoring     — score hundreds from a CSV upload
+      Tab 3: 📈 Analytics         — dataset charts and model insights
+      Tab 4: 📖 Feature Guide     — full reference for all 20 features
+
+    The four variables (tab_single, tab_batch, etc.) are used with Python's
+    "with" statement to add content to each respective tab.
+
+================================================================================
+12. SECTION J — TAB 1: SINGLE APPLICANT SCORING (Lines 574–781)
+================================================================================
+
+Layout (Lines 579)
+    col_form, col_result = st.columns([1.1, 0.9], gap="large")
+    ─────────────────────────────────────────────────────────────────────────
+    Splits the page into two columns side-by-side:
+      Left column (col_form)   : Input form — wider at ratio 1.1
+      Right column (col_result): Results panel — at ratio 0.9
+
+Input Form — Left Column (Lines 581–634)
+    Three expandable sections group the 20 input fields logically:
+
+    🤵 Personal Information (Lines 582–598)
+        alter        : st.slider for Age (range 19–75, default 35)
+        famges       : Dropdown for Personal Status & Sex
+        wohn         : Dropdown for Housing type
+        wohnzeit     : Dropdown for Residence duration
+        gastarb      : Dropdown for Foreign Worker status
+        pers         : Dropdown for Maintenance Liability
+        telef        : Dropdown for Telephone ownership
+
+        Note the coding pattern used for all dropdowns:
+          famges_label = st.selectbox("...", list(PERSONAL_STATUS.values()), ...)
+          famges = [k for k, v in PERSONAL_STATUS.items() if v == famges_label][0]
+        The first line shows readable English labels in the dropdown.
+        The second line reverse-looks-up the numeric key that corresponds
+        to the selected label, because the model requires numeric inputs.
+
+    💰 Financial & Employment (Lines 600–613)
+        laufkont  : Checking Account status (most important feature)
+        sparkont  : Savings account / bonds value
+        verm      : Property / assets owned
+        beruf     : Job type / skill level
+        beszeit   : How long employed at current job
+
+    📑 Loan & Credit History (Lines 615–632)
+        hoehe     : Credit amount requested (DM), typed as a number
+        laufzeit  : Loan duration in months, set via a slider
+        moral     : Past credit behaviour (credit history)
+        verw      : Loan purpose (car, education, business, etc.)
+        rate      : Installment rate as % of disposable income
+        weitkred  : Other instalment plans running simultaneously
+        bishkred  : Number of existing credits at this bank
+        buerge    : Whether a guarantor or co-applicant exists
+
+    Predict Button (Line 634)
+        st.button("⚡ Assess Credit Risk", type="primary", use_container_width=True)
+        ─────────────────────────────────────────────────────────────────────────
+        When clicked, triggers the prediction logic. type="primary" applies
+        the gradient CSS style. use_container_width=True stretches the
+        button to the full width of the form column.
+
+Results Panel — Right Column (Lines 637–781)
+    Input Dictionary Assembly (Lines 638–646)
+        After collecting all dropdown/slider values, they are assembled
+        into a Python dictionary (input_dict) matching the exact column
+        names the model expects.
+
+    Prediction Logic (Lines 648–668)
+        if predict_btn:
+            df_in = pd.DataFrame([input_dict])
+            proba = model.predict_proba(df_in)[0]
+            prob_good = proba[1]
+        ─────────────────────────────────────────────────────────────────────
+        When the button is clicked:
+          1. input_dict is wrapped in a list and converted to a DataFrame
+             with a single row.
+          2. model.predict_proba() returns two probabilities: [P(bad), P(good)]
+             We extract index [1] which is the probability of Good Credit.
+          3. The custom threshold from the sidebar is applied:
+             if prob_good >= threshold → prediction = "Good"
+
+    Session State Storage (Lines 660–665)
+        st.session_state["last_result"] = prediction
+        ─────────────────────────────────────────────────────────────────────
+        Streamlit re-runs the entire script from top to bottom every time
+        the user interacts with anything. Without session_state, results
+        would disappear the moment the user changed any input field.
+        Storing results in session_state preserves them across re-runs.
+
+    Results Display (Lines 671–781)
+        if "last_result" in st.session_state:
+        ─────────────────────────────────────────────────────────────────────
+        Only shows results if a prediction has been made:
+
+        Result Card        : Green "Good Credit Risk" or Red "Bad Credit Risk"
+                             card with the outcome icon.
+        Risk Badge         : Pill badge showing Low / Medium / High risk tier.
+        Gauge Chart        : Credit score dial (300–850 scale).
+        Probability Bar    : Stacked bar showing Good vs Bad probability split.
+        KPI Tiles          : Three metric cards: Credit Score, P(Good), Risk Tier.
+        Radar Chart        : Spider chart of the applicant's profile across
+                             the 8 most important features.
+        Recommendations    : A rule-based checklist checking for risk flags:
+                               - Low checking account balance
+                               - Long loan duration (> 36 months)
+                               - Poor credit history (codes 3 or 4)
+                               - High credit amount (> 10,000 DM)
+                               - Very low savings (< 100 DM)
+                               - Young applicant (< 25 years old)
+        Download Report    : An expandable panel with a text report download
+                             button producing a .txt file with the full
+                             assessment summary.
+
+================================================================================
+13. SECTION K — TAB 2: BATCH SCORING (Lines 783–870)
+================================================================================
+
+PURPOSE: Let a user upload a CSV file with many applicants and score them all.
+
+Template Download (Lines 792–800)
+    A blank CSV with the correct 20 column headers is generated on the fly
+    using io.StringIO() (an in-memory file buffer) and offered as a download.
+    This ensures users create their upload file with the right format.
+
+File Upload (Line 802)
+    st.file_uploader("Upload applicants CSV", type=["csv"])
+    Accepts a .csv file from the user's computer.
+
+Batch Prediction (Lines 809–815)
+    When "⚡ Score All Applicants" is clicked, the uploaded DataFrame is
+    passed to the predict_batch() helper function (Section F11), which
+    adds prediction, prob_good, credit_score, and risk_tier columns.
+
+Summary Statistics (Lines 817–830)
+    Four KPI metric cards are shown:
+      Total Applicants | Approved (Good) | Flagged (Bad) | Avg Credit Score
+
+Risk Tier Distribution Chart (Lines 832–846)
+    A bar chart showing how many applicants fall into each risk tier.
+
+Results Table (Lines 848–853)
+    An interactive scrollable table showing selected columns of results.
+
+Results Download (Lines 855–864)
+    A download button offers the complete scored results as a CSV file
+    with a timestamped filename for record-keeping.
+
+================================================================================
+14. SECTION L — TAB 3: ANALYTICS DASHBOARD (Lines 872–960)
+================================================================================
+
+Displays six charts providing insights into the training dataset and model:
+
+Row 1 (Lines 878–890)
+    Left:  Credit Outcome Distribution — Donut pie chart (70% Good / 30% Bad)
+    Right: Loan Duration by Outcome   — Overlapping histograms
+
+Row 2 (Lines 892–927)
+    Left:  Age vs Credit Amount scatter plot (coloured by outcome)
+    Right: Credit Amount Distribution  — Box plots for Good vs Bad groups
+
+Row 3 (Lines 929–935)
+    Full-width Feature Importance horizontal bar chart — shows all 20
+    features ranked by their influence on the model's decisions.
+
+Row 4 (Lines 937–958)
+    Checking Account Status vs Outcome — Grouped bar chart showing how
+    each level of checking account balance correlates with Good/Bad
+    outcomes. Since this is the highest-importance feature (16.1%),
+    this chart is particularly insightful.
+
+================================================================================
+15. SECTION M — TAB 4: FEATURE GUIDE (Lines 962–994)
+================================================================================
+
+Feature Reference Table (Lines 966–980)
+    A sorted table listing all 20 features with:
+      Column name (original German)
+      Human-readable English name
+      Model importance percentage
+      Impact level (🔴 High / 🟡 Medium / 🟢 Low)
+    This reference helps credit analysts understand what each input
+    field means and how much it influences the model.
+
+Value Mapping Expanders (Lines 982–994)
+    Nine expandable panels, one for each categorical feature, showing
+    the complete mapping between numeric codes and their meanings.
+    This is a quick reference for data entry personnel.
+
+================================================================================
+16. KEY CONCEPTS EXPLAINED (NON-TECHNICAL)
+================================================================================
+
+What is a Random Forest?
+    A Random Forest is a machine learning algorithm that builds many
+    decision trees (200 in this case) and combines their votes to make
+    a prediction. Each tree is trained on a slightly different sample
+    of the data, making the combined result more robust than any single
+    tree. Think of it as asking 200 experts and going with the majority
+    decision.
+
+What is Probability?
+    When the model returns "prob_good = 0.78", it means the model is
+    78% confident this applicant will repay their loan. The remaining
+    22% represents uncertainty.
+
+What is a Threshold?
+    The threshold determines when "78% confident" is enough to say
+    "Approve". At 50% threshold, any probability above 50% = approve.
+    At 70% threshold, only probabilities above 70% = approve.
+
+What is Feature Importance?
+    The model internally measures how often and how much each feature
+    helped it make correct predictions during training. "Checking Account"
+    at 16.1% means it is by far the single most useful piece of information.
+
+What is the Credit Score (300–850 scale)?
+    We convert the model's probability to this standard scale purely for
+    familiarity. The formula is: 300 + (probability^0.7) × 550.
+    This is an approximation of FICO-style scoring and provides an
+    intuitive number for loan officers accustomed to credit scores.
+
+================================================================================
+17. HOW TO RUN THE APPLICATION
+================================================================================
+
+Prerequisites (install once):
+    pip install streamlit pandas numpy plotly scikit-learn joblib
+
+Required files in the same folder:
+    ├── app.py                        (the main application)
+    ├── credit_scoring_model.joblib   (the trained model)
+    └── german_credit_data.csv        (the reference dataset)
+
+Run command:
+    Open a terminal, navigate to the folder, and execute:
+        streamlit run app.py
+
+    The app will open automatically at: http://localhost:8501
+
+================================================================================
+18. FILE STRUCTURE
+================================================================================
+
+Task 1 Credit Scoring Model/
+│
+├── app.py                         ← Main Streamlit application (this code)
+├── credit_scoring_model.joblib    ← Trained Random Forest pipeline saved to disk
+├── german_credit_data.csv         ← 1,000-row German Credit Dataset
+├── credit_scoring_model.ipynb     ← Jupyter notebook used to train the model
+└── CODE_DOCUMENTATION.txt         ← This documentation file
+
+================================================================================
+  END OF DOCUMENTATION
+  Prepared by the Analytics Development Team | April 2025
+  For questions or support, contact your project lead.
+================================================================================
